@@ -1,0 +1,127 @@
+---
+title: "Reproducible Research: Project One"
+author: "Alastair Mak"
+output: html_document
+---
+
+###0. Loading and preprocessing the data
+
+I chose not to address NA values here as this is done later on.
+```{r, echo=TRUE, opts_chunk$set(fig.width=6)}
+if(!file.exists("getdata-projectfiles-UCI HAR Dataset.zip")) {
+  data <- tempfile()
+  download.file("http://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip",data)
+  unzip(data)
+  unlink(data)
+}
+
+data <- read.csv("activity.csv")
+```
+
+###1. What is the mean total number of steps taken per day?
+```{r}
+stepsday <- aggregate(steps ~ date, data, sum)
+hist(stepsday$steps,
+     col="red", main = "Number of steps per day",
+     ylab ="number of days", xlab="number of steps",
+     ylim=c(0,30)
+     )
+```
+
+```{r}
+smean <- format(mean(stepsday$steps,quote = false), scientific = FALSE)
+smedian <- format(median(stepsday$steps), scientific = FALSE)
+```
+
+The mean number of steps per day is `r smean` and the median number of steps per day is `r smedian`.
+
+###2. What is the average daily activity pattern?
+We are using intervals of five minutes. First, we calculate the average number of steps across all of the days, for each of those five minute intervals
+
+```{r}
+stepsint <- aggregate(steps ~ interval, data, mean)
+
+plot(stepsint$interval, stepsint$steps,
+     type="l", xlab="Interval", ylab="Number of steps",
+     main = "Average number of steps per interval")
+
+maxday <- as.integer(subset(stepsint, steps == max(stepsint$steps), interval))
+```
+The interval that contains the maximum number of steps, on average across all the days, is interval `r maxday`.
+
+###3. Imputing missing values
+```{r}
+incomplete <- sum(!complete.cases(data))
+```
+There are `r incomplete` rows that contain NA values.
+
+For any interval with NA values, let's replace those NA values with the average we calculated in section 2. The instructions state that this is acceptable. For example, if on day one, interval 25 is NA, let's replace this NA with the average for interval 25 across the entire dataset.
+
+```{r}
+#Our new data set with the NA values replaced
+data2 <- transform(data,
+          steps = ifelse(is.na(data$steps),  #perform a test on each "steps" value
+          stepsint$steps[match(data$interval, stepsint$interval)],  #take this if "steps" is NA
+          data$steps)  #keep original entry if not NA
+                  )
+```
+
+Let's plot this new spread against our original plot:
+```{r fig.width=12}
+par(mfrow=c(1,2))
+
+hist(stepsday$steps,
+     col="red", main = "Number of steps per day (initial data set)",
+     ylab ="number of days", xlab="number of steps",
+     ylim=c(0,40)
+)
+
+daysteps <- aggregate(steps ~ date, data2, sum)
+hist(daysteps$steps,
+     col="red", main = "Number of steps per day (revised data set)",
+     ylab ="", xlab="number of steps",
+     ylim=c(0,40)
+)
+```
+
+Calculate the difference between the two means, and the two median values:
+```{r}
+smean2 <- format(mean(daysteps$steps,quote = false), scientific = FALSE)
+smedian2 <- format(median(daysteps$steps), scientific = FALSE)
+
+smeandiff <- as.numeric(smean) - as.numeric(smean2)
+smediandiff <- as.numeric(smedian) - as.numeric(smedian2)
+```
+The new mean is `r smean2` and the new median is `r smedian2`. The difference between the mean values is `r smeandiff` and the difference between the median values is `r smediandiff`.
+
+###4. Are there differences in activity patterns between weekdays and weekends?
+
+Here is the code to answer this question:
+```{r}
+data3 <- data2 #copy our data for this use
+weekenddays <- c("Saturday","Sunday") #identify weekend days
+data3$day <- (weekdays(as.Date(data2$date,'%Y-%m-%d'))) #create column identifying day of week
+data3$wend <- ifelse(data3$day %in% weekenddays, #check if the new column is "Saturday" or "Sunday"
+                    "Weekend", #If yes, Weekend
+                    "Weekday" #If not, Weekday
+)
+
+wendsteps <- aggregate(steps ~ wend + interval, data3, mean) #aggregate by "wend" and "interval"
+
+#split our aggregated data by the "wend" field
+data3wdy <- wendsteps[wendsteps$wend == "Weekday",]
+data3wnd <- wendsteps[wendsteps$wend == "Weekend",]
+
+par(mfrow=c(1,2))
+plot(data3wdy$interval, data3wdy$steps, type="l", xlab="interval", ylab="number of steps",
+     main="Average steps on weekdays",
+     ylim=c(0,250)
+     )
+plot(data3wnd$interval, data3wnd$steps, type="l", xlab="interval", ylab="",
+     main="Average steps on weekends",
+     ylim=c(0,250))
+
+wdymean <- format(mean(data3wdy$steps), scientific = FALSE)
+wndmean <- format(mean(data3wnd$steps), scientific = FALSE)
+```
+We see that there is a higher peak in the mornings on weekdays, but generally there is more activity at weekends, with average number of steps per interval on weekdays at `r wdymean`, and average number of steps per interval on weekends at `r wndmean`.
